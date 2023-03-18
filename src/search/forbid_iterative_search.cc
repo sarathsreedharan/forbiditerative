@@ -796,6 +796,7 @@ void ForbidIterativeSearch::extend_for_duplicates(std::unordered_map<int, int>& 
     string act_name, original_multi_act_name, parsed_act_name,multiset_act_name;
     int multiset_act_id;
     OperatorsProxy operators = task_proxy.get_operators();
+        int max_count_per_op = 0, current_count = 0;
 
     // Iterating over all pairs in the multiset
     for (auto it=multiset.begin(); it != multiset.end(); ++it) {
@@ -803,8 +804,9 @@ void ForbidIterativeSearch::extend_for_duplicates(std::unordered_map<int, int>& 
         // Getting the original name of the action
         multiset_act_name = operators[multiset_act_id].get_name();
         original_multi_act_name = get_original_name(multiset_act_name);
+        max_count_per_op = 0;
+        current_count = 0;
         // Iterating over all operators
-        int max_count_per_op = 0, current_count = 0;
         for (OperatorProxy op : operators){
             act_name = op.get_name();
             parsed_act_name = get_original_name(act_name);
@@ -816,8 +818,6 @@ void ForbidIterativeSearch::extend_for_duplicates(std::unordered_map<int, int>& 
                     if (max_count_per_op < current_count){
                         max_count_per_op = current_count;
                     }
-                }else{
-                    current_count = 0;
                 }
             }
         }
