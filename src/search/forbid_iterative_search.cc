@@ -782,56 +782,40 @@ void ForbidIterativeSearch::add_forbid_plan_reformulation_option(OptionParser &p
 //////////////// De-duplication stuff ///////////////////////////
 
 std::string ForbidIterativeSearch::get_original_name(std::string act_name) const {
-        string del = duplicate_prefix, orig_act_name;
-        int start, end = act_name.find(del);
-        if (end != std::string::npos){
-        end = act_name.find(del, start);
-        orig_act_name = act_name.substr(0, end) ;
-    	return orig_act_name;
-        }else{
-          return act_name;
-        }
+    auto npos = act_name.find(duplicate_prefix);
+    if (npos == std::string::npos) {
+        return act_name;
+    }
+    return act_name.substr(0, npos) ;
 }
+
 void ForbidIterativeSearch::extend_for_duplicates(std::unordered_map<int, int>& multiset) const {
-    string act_name, original_multi_act_name, parsed_act_name,multiset_act_name;
-    int multiset_act_id;
     OperatorsProxy operators = task_proxy.get_operators();
-        int max_count_per_op = 0, current_count = 0;
+    std::unordered_map<string, int> counts_per_original_name;
 
-    // Iterating over all pairs in the multiset
+    // Iterate over the operators, get original name and store the max count by original name
+    for (OperatorProxy op : operators){
+        string parsed_act_name = get_original_name(op.get_name());
+        int current_count = 0;
+        if (multiset.find(op.get_id()) != multiset.end()) {
+            current_count = multiset[op.get_id()];
+        }
+        auto it = counts_per_original_name.find(parsed_act_name); 
+        if ( (it == counts_per_original_name.end()) || (it->second < current_count) ) {
+            counts_per_original_name[parsed_act_name] = current_count;
+        }
+    }
+
+    // Iterating over all pairs in the multiset, update count by the original name
     for (auto it=multiset.begin(); it != multiset.end(); ++it) {
-        multiset_act_id = it->first;
         // Getting the original name of the action
-        multiset_act_name = operators[multiset_act_id].get_name();
-        original_multi_act_name = get_original_name(multiset_act_name);
-        max_count_per_op = 0;
-        current_count = 0;
-        // Iterating over all operators
-        for (OperatorProxy op : operators){
-            act_name = op.get_name();
-            parsed_act_name = get_original_name(act_name);
-            if(original_multi_act_name == parsed_act_name){
-                // check if the action is already in the multiset
-                if (multiset.find(op.get_id()) != multiset.end()){
-                    current_count = multiset[op.get_id()];
-                    // Checking for max count
-                    if (max_count_per_op < current_count){
-                        max_count_per_op = current_count;
-                    }
-                }
-            }
+        string name = operators[it->first].get_name();
+        string original_name = get_original_name(name);
+        auto it2 = counts_per_original_name.find(original_name);
+        // Update the count
+        if (it2 != counts_per_original_name.end()) {
+            it->second = it2->second;            
         }
-
-        // Adding the duplicates to the multiset
-        for (OperatorProxy op : task_proxy.get_operators()){
-            act_name = op.get_name();
-            parsed_act_name = get_original_name(act_name);
-            if(original_multi_act_name == parsed_act_name){
-                // check if the action is already in the multiset
-                multiset[op.get_id()] = max_count_per_op;
-            }
-        }
-
     }
 }
 
