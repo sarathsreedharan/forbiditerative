@@ -49,7 +49,9 @@ ForbidIterativeSearch::ForbidIterativeSearch(const Options &opts)
       json_file_to_dump(""),
       is_external_plan_file(false),
       is_external_plans_path(false),
-      is_json_file_to_dump(false) {
+      is_json_file_to_dump(false),
+      is_deduplicating(true), // TODO: Turn this to false by default
+      duplicate_prefix("#") {
 
     if (opts.contains("extend_plans_with_symmetry")) {
         symmetry_group =  opts.get<shared_ptr<Group>>("extend_plans_with_symmetry");
@@ -97,6 +99,14 @@ ForbidIterativeSearch::ForbidIterativeSearch(const Options &opts)
             is_json_file_to_dump = true;
         }
     }
+
+    if (opts.contains("deduplicate")) {
+        is_deduplicating = opts.get<bool>("deduplicate");
+    }
+    if (opts.contains("duplicate_prefix")) {
+        duplicate_prefix = opts.get<string>("duplicate_prefix");
+    }
+
 }
 
 ForbidIterativeSearch::~ForbidIterativeSearch() {
@@ -585,6 +595,11 @@ shared_ptr<AbstractTask> ForbidIterativeSearch::create_reformulated_task_multise
         plan_to_multiset(plan, plan_multiset);
 //        bool is_not_subset = multiset_union(multiset, plan_multiset);
         multiset_union(multiset, plan_multiset);
+        // Check if deduplication flag is set to true, if so extend multiset with duplicates
+        if (is_deduplicating){
+            extend_for_duplicates(multiset);
+        }
+
         
         //TODO: Check what's going on here - why are we dumping plans again
 /*
@@ -763,6 +778,48 @@ void ForbidIterativeSearch::add_forbid_plan_reformulation_option(OptionParser &p
     parser.add_option<bool>("dumping_plans_files", "Dumping the plans to files", "true");
 
 }
+
+//////////////// De-duplication stuff ///////////////////////////
+
+std::string ForbidIterativeSearch::get_original_name(std::string act_name) const {
+    auto npos = act_name.find(duplicate_prefix);
+    if (npos == std::string::npos) {
+        return act_name;
+    }
+    return act_name.substr(0, npos) ;
+}
+
+void ForbidIterativeSearch::extend_for_duplicates(std::unordered_map<int, int>& multiset) const {
+    OperatorsProxy operators = task_proxy.get_operators();
+    std::unordered_map<string, int> counts_per_original_name;
+
+    // Iterate over the operators, get original name and store the max count by original name
+    for (OperatorProxy op : operators){
+        string parsed_act_name = get_original_name(op.get_name());
+        int current_count = 0;
+        if (multiset.find(op.get_id()) != multiset.end()) {
+            current_count = multiset[op.get_id()];
+        }
+        auto it = counts_per_original_name.find(parsed_act_name); 
+        if ( (it == counts_per_original_name.end()) || (it->second < current_count) ) {
+            counts_per_original_name[parsed_act_name] = current_count;
+        }
+    }
+
+    // Iterating over all pairs in the multiset, update count by the original name
+    for (auto it=multiset.begin(); it != multiset.end(); ++it) {
+        // Getting the original name of the action
+        string name = operators[it->first].get_name();
+        string original_name = get_original_name(name);
+        auto it2 = counts_per_original_name.find(original_name);
+        // Update the count
+        if (it2 != counts_per_original_name.end()) {
+            it->second = it2->second;            
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////
 
 
 
